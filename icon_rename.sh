@@ -106,7 +106,6 @@ validate_directory() {
 # 解析命令行参数
 parse_arguments() {
     local dir="$1"
-    local name="$2"
     
     # 如果未提供目录，交互式提示
     if [[ -z "$dir" ]]; then
@@ -125,6 +124,25 @@ parse_arguments() {
     
     # 导出变量供后续使用
     TARGET_DIR="$dir"
+}
+
+# 获取 Icon 名称
+get_icon_name() {
+    local name="$1"
+    
+    # 如果未提供名称，交互式提示
+    if [[ -z "$name" ]]; then
+        echo ""
+        read -p "请输入 Icon 名称 (直接回车自动生成): " name
+    fi
+    
+    # 如果名称为空，生成随机名称
+    if [[ -z "$name" ]]; then
+        name=$(generate_random_suffix)
+        echo "自动生成名称: $name"
+    fi
+    
+    # 导出变量供后续使用
     ICON_NAME="$name"
 }
 
@@ -472,7 +490,9 @@ main() {
     # 设置退出时清理临时文件
     trap cleanup EXIT
     
-    parse_arguments "$1" "$2"
+    # 分别处理目录和名称参数
+    parse_arguments "$1"
+    get_icon_name "$2"
     
     echo ""
     echo "目标目录: $TARGET_DIR"
