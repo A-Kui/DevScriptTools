@@ -17,6 +17,7 @@ iOS 开发工具集合，包含图标处理相关的实用脚本。
 - ✅ 自动检测 @1x/@2x/@3x 变体并分组
 - ✅ 校验缺失的变体（@2x/@3x）并提示
 - ✅ 可选的文件夹重命名功能
+- ✅ 扁平化模式：合并子文件夹到父目录
 - ✅ 自动生成随机名称或使用指定前缀
 - ✅ 支持 PNG、JPG、JPEG 格式
 
@@ -28,8 +29,11 @@ iOS 开发工具集合，包含图标处理相关的实用脚本。
 **选项说明:**
 - `-n, --name <name>` - 指定 icon 名称前缀（可选，默认自动生成）
 - `-r, --rename-dir` - 同时重命名子文件夹（默认：否）
+- `-f, --flatten` - 扁平化：将子文件夹中的文件移到父目录，删除空文件夹
 - `-d, --direct` - 直接处理指定目录，不递归子文件夹
 - `-h, --help` - 显示帮助信息
+
+**注意：** `-r` 和 `-f` 选项互斥，不能同时使用
 
 **使用示例:**
 
@@ -54,7 +58,62 @@ iOS 开发工具集合，包含图标处理相关的实用脚本。
 
 # 7. 使用波浪号代表用户目录
 ./sh/icon_rename.sh ~/Downloads/icons -n Icon
+
+# 8. 扁平化模式：将所有子文件夹的文件移到父目录
+./sh/icon_rename.sh /path/to/icons -f
+
+# 9. 指定名称并扁平化
+./sh/icon_rename.sh /path/to/icons -n Icon -f
 ```
+
+**常用使用场景快速参考：**
+
+| 场景描述 | 命令示例 | 说明 |
+|---------|---------|------|
+| 🚀 **最常用：扁平化 + 自定义名称** | `./sh/icon_rename.sh ~/Downloads/icon -n Icon -f` | 将多个子文件夹的图标合并到一个目录，统一命名 |
+| 📁 **保持文件夹结构，只重命名文件** | `./sh/icon_rename.sh ~/Downloads/icon -n MyIcon` | 每个子文件夹保留，只重命名里面的文件 |
+| 📦 **重命名文件和文件夹** | `./sh/icon_rename.sh ~/Downloads/icon -n AppIcon -r` | 文件夹名称与文件名保持一致 |
+| ⚡ **扁平化，自动生成名称** | `./sh/icon_rename.sh ~/Downloads/icon -f` | 快速合并，名称随机生成 |
+| 🎯 **只处理单个文件夹** | `./sh/icon_rename.sh ~/Downloads/icon/iconA -d -n Icon` | 不递归，直接处理指定文件夹 |
+| 🔍 **交互式使用** | `./sh/icon_rename.sh` | 根据提示输入路径和选项 |
+
+**💡 使用技巧：**
+
+1. **路径输入建议**
+   ```bash
+   # ✅ 推荐：使用波浪号
+   ./sh/icon_rename.sh ~/Downloads/icon -n Icon -f
+
+   # ✅ 推荐：使用绝对路径
+   ./sh/icon_rename.sh /Users/k/Downloads/icon -n Icon -f
+
+   # ❌ 避免：使用相对路径（容易出错）
+   ./sh/icon_rename.sh ./Users/k/Downloads/icon -n Icon -f
+   ```
+
+2. **选项组合规则**
+   ```bash
+   # ✅ 可以组合：-n + -f
+   ./sh/icon_rename.sh ~/Downloads/icon -n Icon -f
+
+   # ✅ 可以组合：-n + -r
+   ./sh/icon_rename.sh ~/Downloads/icon -n Icon -r
+
+   # ❌ 不能组合：-r + -f (互斥)
+   # -r: 保留文件夹结构
+   # -f: 删除文件夹结构
+   ```
+
+3. **名称前缀建议**
+   ```bash
+   # 使用有意义的名称
+   ./sh/icon_rename.sh ~/Downloads/icon -n ic_home -f      # 首页图标
+   ./sh/icon_rename.sh ~/Downloads/icon -n ic_user -f      # 用户图标
+   ./sh/icon_rename.sh ~/Downloads/icon -n ic_setting -f   # 设置图标
+
+   # 不指定名称，自动生成（适合临时使用）
+   ./sh/icon_rename.sh ~/Downloads/icon -f
+   ```
 
 **处理场景示例:**
 
@@ -126,6 +185,45 @@ icons/
 ```
 
 **注意：** 使用 `-r` 选项时，文件夹会自动使用与内部文件相同的基础名称，确保命名统一。
+
+**场景4：扁平化模式（合并到单层目录）**
+```
+输入目录结构:
+icons/
+├── iconA/
+│   ├── logo.png
+│   ├── logo@2x.png
+│   └── logo@3x.png
+├── iconB/
+│   ├── image.png
+│   └── image@2x.png
+└── iconC/
+    └── pic.png
+
+执行命令: ./sh/icon_rename.sh icons -n Icon -f
+
+输出结果:
+icons/
+├── Icon_abc123.png
+├── Icon_abc123@2x.png
+├── Icon_abc123@3x.png
+├── Icon_def456.png
+├── Icon_def456@2x.png
+└── Icon_ghi789.png
+
+# 所有子文件夹（iconA、iconB、iconC）已被删除
+```
+
+**注意：** 使用 `-f` 选项会将所有子文件夹中的文件移到父目录，并删除空的子文件夹。
+
+**处理模式对比表：**
+
+| 模式 | 选项 | 文件处理 | 文件夹处理 | 使用场景 |
+|------|------|----------|------------|----------|
+| **正常模式** | 无 | ✅ 重命名 | ⏸️ 保持原样 | 保留文件夹结构 |
+| **重命名模式** | `-r` | ✅ 重命名 | ✏️ 重命名 | 规范化整体结构 |
+| **扁平化模式** | `-f` | ✅ 重命名+移动 | 🗑️ 删除 | 合并到单层目录 |
+| **直接模式** | `-d` | ✅ 重命名 | ⏸️ 不递归 | 只处理指定目录 |
 
 **输出信息说明:**
 - ✅ 绿色 - 成功完成

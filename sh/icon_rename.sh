@@ -10,6 +10,7 @@
 #   directory          - 包含 icon 文件/文件夹的目录路径 (可选，未提供时交互式输入)
 #   -n, --name <name>  - icon 的基础名称 (可选，未提供时自动生成)
 #   -r, --rename-dir   - 同时重命名子文件夹 (默认: 不重命名)
+#   -f, --flatten      - 扁平化：将子文件夹中的文件移到父目录，删除空文件夹
 #   -d, --direct       - 直接处理指定目录下的文件，不递归子文件夹
 #
 # 支持的文件格式: .png, .jpg, .jpeg
@@ -18,6 +19,7 @@
 #   ./icon_rename.sh ./icons                    # 处理 icons 下所有子文件夹
 #   ./icon_rename.sh ./icons -n MyIcon          # 使用指定名称前缀
 #   ./icon_rename.sh ./icons -r                 # 同时重命名子文件夹
+#   ./icon_rename.sh ./icons -f                 # 扁平化：移动文件到父目录
 #   ./icon_rename.sh ./icons/iconA -d           # 只处理 iconA 目录本身
 #
 
@@ -32,6 +34,7 @@ NC='\033[0m' # No Color
 # 全局变量
 ICON_NAME=""
 RENAME_DIR=false
+FLATTEN_MODE=false
 DIRECT_MODE=false
 TARGET_DIR=""
 
@@ -40,6 +43,7 @@ TOTAL_FOLDERS_PROCESSED=0
 TOTAL_FILES_PROCESSED=0
 TOTAL_FILES_RENAMED=0
 TOTAL_FOLDERS_RENAMED=0
+TOTAL_FOLDERS_DELETED=0
 
 # 打印错误信息
 print_error() {
@@ -143,6 +147,7 @@ Icon Rename Tool - iOS 图标批量重命名工具
 选项:
   -n, --name <name>  - icon 的基础名称 (可选，未提供时自动生成)
   -r, --rename-dir   - 同时重命名子文件夹 (默认: 不重命名)
+  -f, --flatten      - 扁平化：将子文件夹中的文件移到父目录，删除空文件夹
   -d, --direct       - 直接处理指定目录下的文件，不递归子文件夹
   -h, --help         - 显示帮助信息
 
@@ -150,7 +155,11 @@ Icon Rename Tool - iOS 图标批量重命名工具
   ./icon_rename.sh ./icons                    # 处理 icons 下所有子文件夹
   ./icon_rename.sh ./icons -n MyIcon          # 使用指定名称前缀
   ./icon_rename.sh ./icons -r                 # 同时重命名子文件夹
+  ./icon_rename.sh ./icons -f                 # 扁平化：移动文件到父目录
+  ./icon_rename.sh ./icons -n Icon -f         # 指定名称并扁平化
   ./icon_rename.sh ./icons/iconA -d           # 只处理 iconA 目录本身
+
+注意: -r 和 -f 选项互斥，不能同时使用
 
 支持的文件格式: .png, .jpg, .jpeg
 EOF
@@ -176,6 +185,10 @@ parse_arguments() {
                 ;;
             -r|--rename-dir)
                 RENAME_DIR=true
+                shift
+                ;;
+            -f|--flatten)
+                FLATTEN_MODE=true
                 shift
                 ;;
             -d|--direct)
@@ -204,6 +217,14 @@ parse_arguments() {
         echo "Icon Rename Tool - iOS 图标批量重命名工具"
         echo ""
         read -p "请输入目录路径: " dir
+    fi
+
+    # 检查 -r 和 -f 选项互斥
+    if [[ "$RENAME_DIR" == true ]] && [[ "$FLATTEN_MODE" == true ]]; then
+        print_error "-r (--rename-dir) 和 -f (--flatten) 选项不能同时使用"
+        echo "  -r: 重命名子文件夹（保留文件夹结构）"
+        echo "  -f: 扁平化（移动文件到父目录并删除子文件夹）"
+        exit 1
     fi
 
     # 验证目录
@@ -403,11 +424,12 @@ check_missing_variants() {
 }
 
 # 处理单个目录
-# 参数: $1 - 目录路径, $2 - 名称前缀 (可选), $3 - 是否重命名目录
+# 参数: $1 - 目录路径, $2 - 名称前缀 (可选), $3 - 是否重命名目录, $4 - 父目录路径（用于扁平化模式）
 process_directory() {
     local dir="$1"
     local name_prefix="$2"
     local rename_dir="$3"
+    local flatten_target="$4"  # 扁平化模式下的目标父目录
 
     local dir_name=$(basename "$dir")
     local parent_dir=$(dirname "$dir")
@@ -465,9 +487,34 @@ process_directory() {
     TOTAL_FILES_RENAMED=$((TOTAL_FILES_RENAMED + renamed_count))
     TOTAL_FOLDERS_PROCESSED=$((TOTAL_FOLDERS_PROCESSED + 1))
 
-    # 重命名目录 (如果启用)
-    # 使用第一个分组的新基础名称作为文件夹名，确保统一
-    if [[ "$rename_dir" == true ]] && [[ -n "$first_new_base_name" ]]; then
+    # 扁平化模式：移动文件到父目录
+    if [[ -n "$flatten_target" ]]; then
+        echo "     📦 移动文件到父目录..."
+        local move_success=0
+
+        # 移动所有图片文件到父目录
+        shopt -s nullglob  # 如果没有匹配文件，通配符扩展为空
+        for file in "$dir"/*.png "$dir"/*.jpg "$dir"/*.jpeg "$dir"/*.PNG "$dir"/*.JPG "$dir"/*.JPEG; do
+            [[ -e "$file" ]] || continue
+            local filename=$(basename "$file")
+
+            if mv "$file" "$flatten_target/$filename" 2>/dev/null; then
+                ((move_success++))
+            else
+                print_error "     ✗ 移动失败: $filename" >&2
+            fi
+        done
+        shopt -u nullglob  # 恢复默认设置
+
+        # 删除空文件夹
+        if rmdir "$dir" 2>/dev/null; then
+            print_success "     ✓ 已删除空文件夹: $dir_name"
+            TOTAL_FOLDERS_DELETED=$((TOTAL_FOLDERS_DELETED + 1))
+        else
+            print_warning "     ⚠ 文件夹不为空，无法删除: $dir_name"
+        fi
+    # 重命名目录模式
+    elif [[ "$rename_dir" == true ]] && [[ -n "$first_new_base_name" ]]; then
         local new_dir_name="$first_new_base_name"
         local new_dir_path="$parent_dir/$new_dir_name"
 
@@ -503,13 +550,19 @@ process_directory_tree() {
     if [[ ${#subdirs[@]} -eq 0 ]]; then
         print_warning "未找到子文件夹，将直接处理该目录"
         echo ""
-        process_directory "$root_dir" "$ICON_NAME" false
+        process_directory "$root_dir" "$ICON_NAME" false ""
         return
     fi
 
     # 处理每个子目录
     for subdir in "${subdirs[@]}"; do
-        process_directory "$subdir" "$ICON_NAME" "$RENAME_DIR"
+        if [[ "$FLATTEN_MODE" == true ]]; then
+            # 扁平化模式：传入父目录路径
+            process_directory "$subdir" "$ICON_NAME" false "$root_dir"
+        else
+            # 正常模式或重命名模式
+            process_directory "$subdir" "$ICON_NAME" "$RENAME_DIR" ""
+        fi
     done
 }
 
@@ -526,6 +579,10 @@ print_final_summary() {
 
     if [[ "$RENAME_DIR" == true ]]; then
         echo "📦 重命名的文件夹: $TOTAL_FOLDERS_RENAMED"
+    fi
+
+    if [[ "$FLATTEN_MODE" == true ]]; then
+        echo "🗑️  删除的文件夹数: $TOTAL_FOLDERS_DELETED"
     fi
 
     echo ""
